@@ -1,0 +1,13 @@
+Package: graphicMiscue
+Title: Tools to Graphically Analyze Miscues
+Version: 0.0.1
+Authors@R: c(person("Tyler", "Rinker", email = "tyler.rinker@gmail.com", role = c("aut", "cre")))
+Maintainer: Tyler Rinker <tyler.rinker@gmail.com>
+Description: Analyze miscues graphically.
+Depends: R (>= 3.4.0)
+Imports: dplyr, textshape, utils, stats
+Date: 2018-03-13
+License: GPL-2
+LazyData: TRUE
+Roxygen: list(wrap = FALSE)
+RoxygenNote: 6.0.1

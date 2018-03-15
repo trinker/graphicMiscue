@@ -1,0 +1,12 @@
+name: graphical_miscue_analysis
+title: graphical_miscue_analysis
+username:
+account: tylerrinker
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 299036
+bundleId: 1267608
+url: https://tylerrinker.shinyapps.io/graphical_miscue_analysis/
+when: 1521000000.13964
+asMultiple: FALSE
+asStatic: FALSE

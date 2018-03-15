@@ -1,0 +1,208 @@
+---
+title: "Johns Graphic Similarity Analysis"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+runtime: shiny
+---
+    
+```{r}
+library(dplyr)
+library(graphicMiscue)
+library(textclean)
+library(readr)
+library(readxl)
+library(ggplot2)
+library(scales)
+library(plotly)
+library(shiny)
+library(numform)
+
+# values <- reactiveValues()
+# 
+# values$dat <- miscue %>%
+#         mutate_all(trimws)
+
+```
+    
+Inputs {.sidebar}
+-------------------------------------
+
+```{r}
+output$miscue_template.csv <- downloadHandler(
+    filename = function() {'miscue_template.csv'},
+    content = function(file) {
+        readr::write_csv(graphicMiscue::miscue, file)
+    }
+)
+
+downloadLink("miscue_template.csv", "Download Miscue Template")
+
+
+
+
+
+fileInput("upload", "Upload Miscue .csv File",
+    multiple = FALSE,
+    accept = c(".csv")
+)
+
+dat <- reactive({
+
+    inFile <- input$upload
+
+    if (is.null(inFile)) return(NULL)
+
+    readr::read_csv(inFile$datapath)
+})
+  
+# if () {
+#     dat <- readr::read_csv('miscues_text.csv') %>%
+#         mutate_all(trimws)
+# } else {
+#     dat <- readxl::read_excel('miscues_text.xlsx') %>%
+#         mutate_all(trimws)
+# }
+
+get_dat <- reactive({
+	
+	validate(
+      need(input$upload, 'Waiting for miscue .csv file upload!')
+    )	
+	
+	mdat <- mutate_all(dat(), trimws)
+	colnames(mdat) <- tolower(colnames(mdat))
+	mdat
+	
+})
+
+bads <- reactive({
+	
+	mdat <- get_dat()
+
+	lapply(mdat, function(x) paste(grep('[^a-zA-Z\'-]', x), collapse = ', '))
+	
+})
+	
+	
+get_dat2 <- reactive({
+	
+	mdat <- get_dat()
+
+	chunked <- chunk_text_miscue(
+	    mdat$text,
+	    mdat$miscue
+	)
+	
+	
+	tbl_df(do.call(rbind, Map(function(txt, misc) {
+	
+	    out <- unlist(Map(function(t, m, n) {
+	        compare_size(t, m) & compare_shape(t, m) & compare_first_letter(t, m, n)
+	    }, txt, misc, names(txt)))
+	
+	
+	    m <- setNames(as.data.frame(lapply(misc, function(x) {if(length(x) == 1 && is.na(x)) return('');paste(x, collapse = '')}), 
+	        stringsAsFactors = FALSE), paste(c('b', 'm', 'e'), 'miscue', sep = '_'))
+	
+	    tx <- setNames(as.data.frame(lapply(txt, function(x) {if(length(x) == 1 && is.na(x)) return('');paste(x, collapse = '')}), 
+	        stringsAsFactors = FALSE), paste(c('b', 'm', 'e'), 'text', sep = '_'))
+	
+	
+	    out[unlist(lapply(txt, anyNA))] <- NA
+	    data.frame(m, tx, t(as.data.frame(out)), stringsAsFactors = FALSE)
+	
+	}, chunked$text, chunked$miscue))) %>%
+	    stats::setNames(textclean::mgsub(names(.), sprintf('^%s$', c('b', 'm', 'e')), c('Beginning', 'Middle', "End"), fixed = FALSE))
+})
+
+
+get_sums <- reactive({
+	
+	
+	bind_rows(
+	    get_dat2() %>%
+	        select(-c(b_miscue:e_text)) %>%
+	        summarize_all(
+	            function(x) {sum(x, na.rm = TRUE)}
+	        ),
+	    get_dat2() %>%
+	        select(-c(b_miscue:e_text)) %>%
+	        summarize_all(
+	            function(x) {length(x) - sum(is.na(x))}
+	        )
+	) 
+
+})
+ 
+```
+ 
+     
+Row {data-height=650}
+-------------------------------------
+
+### Counts
+
+```{r}
+renderTable({
+	
+	mdat <- get_dat()
+	
+	data_frame(
+	    miscue = mdat$miscue, 
+	    text = mdat$text
+	) %>%
+	    bind_cols(get_dat2()) %>%
+	    mutate_at(vars(Beginning, Middle, End),
+	        .funs = function(x) {
+	            ifelse(is.na(x), 'X', ifelse(x, '&#10004', ''))
+	      
+	        }
+	    ) 
+}, sanitize.text.function = function(x) x)
+```
+
+Row {data-height=350}
+-------------------------------------
+   
+### Totals
+
+```{r}
+renderTable({
+	
+	msums <- get_sums()
+	
+	x <- bind_rows(
+	    msums %>% mutate_all(.funs = numform::ff_num(digits = 0)),
+	    as_tibble(msums[1,]/msums[2,]) %>% mutate_all(.funs = numform::ff_prop2percent(digits = 0))
+	) %>%
+	    mutate(Type = c('N Dissimilar', 'N Analyzed', 'Percent')) %>%
+	    select(Type, everything()) 
+	
+	x <- as.data.frame(x, stringsAsFactors = FALSE)
+	colnames(x)[1] <- ''
+	x
+	
+}, align = 'lrrr')
+```   
+    
+### Bar Plot
+
+```{r}
+
+renderPlotly({
+	
+	msums <- get_sums()
+		
+	out <- ggplot(stack(as_tibble(msums[1,]/msums[2,])), aes(ind, values)) +
+	    geom_bar(stat = 'identity', width =.95) +
+	    scale_y_continuous(labels = scales::percent, expand = c(0, 0), 
+	        limits = c(0, 1), breaks = seq(0, 1, by = .2)) +
+	    theme_bw() +
+	    theme(panel.grid.major.x = element_blank(), axis.ticks.x = element_blank()) +
+	    labs(y = NULL, x = NULL)
+	
+    plotly::ggplotly(out)
+})
+	
+```
